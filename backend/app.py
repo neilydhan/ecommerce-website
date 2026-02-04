@@ -73,10 +73,12 @@ def create_checkout_session():
         
         # Create Stripe Checkout Session
         session = stripe.checkout.Session.create(
+            ui_mode = 'custom',
             line_items=line_items,
             mode='payment',
             success_url=f'{origin}/success?session_id={{CHECKOUT_SESSION_ID}}',
             cancel_url=f'{origin}/',
+            return_url=f'{origin}/complete?session_id={{CHECKOUT_SESSION_ID}}',
             automatic_tax={'enabled': True},
             shipping_address_collection={
                 'allowed_countries': ['US', 'CA'],
