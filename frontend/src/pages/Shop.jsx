@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';  // ← Make sure this is imported
 import Header from '../components/Header';
 import ProductCard from '../components/ProductCard';
 import ShoppingCart from '../components/ShoppingCart';
 
 const Shop = () => {
+  const navigate = useNavigate();  // ← Make sure this is here
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,28 +53,12 @@ const Shop = () => {
     setCart(prevCart => prevCart.filter(item => item.productId !== productId));
   };
 
-  const handleCheckout = async () => {
-    setCheckoutLoading(true);
-
-    try {
-      const items = cart.map(item => ({
-        priceId: item.priceId,
-        quantity: item.quantity
-      }));
-
-      const response = await axios.post('http://localhost:5000/create-checkout-session', { items });
-      
-      // Redirect to Stripe Checkout
-      window.location.href = response.data.url;
-    } catch (err) {
-      console.error('Checkout error:', err);
-      setError('Failed to proceed to checkout. Please try again.');
-      setCheckoutLoading(false);
-    }
+  const handleCheckout = () => {
+    // Fixed: Navigate to /checkout with cart data
+    navigate('/checkout', { state: { cart } });
   };
 
   const showNotification = (message) => {
-    // Simple notification (you could use a toast library like react-toastify)
     const notification = document.createElement('div');
     notification.className = 'notification';
     notification.textContent = message;

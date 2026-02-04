@@ -11,6 +11,7 @@ CORS(app)  # Enable CORS for React frontend
 
 # Configure Stripe
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+stripe.api_version = '2026-01-28.clover'  # This is correct
 webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
 
 @app.route('/api/products', methods=['GET'])
@@ -51,16 +52,17 @@ def get_products():
 
 @app.route('/create-checkout-session', methods=['POST'])
 def create_checkout_session():
-    """Create a Stripe Checkout session with cart items"""
+    """Create Stripe Checkout Session with Custom UI"""
     try:
         data = request.get_json()
         items = data.get('items', [])
         
-        # Validate that items were provided
+        print(f"Creating custom checkout session for {len(items)} items")
+        
         if not items or len(items) == 0:
             return jsonify({'error': 'Cart is empty'}), 400
         
-        # Format items for Stripe Checkout
+        # Format line items for Stripe
         line_items = []
         for item in items:
             line_items.append({
@@ -68,30 +70,50 @@ def create_checkout_session():
                 'quantity': item['quantity']
             })
         
-        # Get the origin for success/cancel URLs
-        origin = request.headers.get('Origin', 'http://localhost:3000')
-        
-        # Create Stripe Checkout Session
+        # Create Checkout Session with CUSTOM UI mode
         session = stripe.checkout.Session.create(
-            ui_mode = 'custom',
+            ui_mode='custom',
             line_items=line_items,
             mode='payment',
-            success_url=f'{origin}/success?session_id={{CHECKOUT_SESSION_ID}}',
-            cancel_url=f'{origin}/',
-            return_url=f'{origin}/complete?session_id={{CHECKOUT_SESSION_ID}}',
+            return_url='http://localhost:3000/success?session_id={CHECKOUT_SESSION_ID}',
             automatic_tax={'enabled': True},
-            shipping_address_collection={
-                'allowed_countries': ['US', 'CA'],
-            },
         )
         
-        return jsonify({'url': session.url}), 200
+        print(f"✅ Checkout session created: {session.id}")
+        print(f"   Client secret (first 30 chars): {session.client_secret[:30]}...")
+        
+        # Return the client secret - make sure it's not double-encoded
+        return jsonify(clientSecret=session.client_secret), 200
         
     except Exception as e:
-        print(f'Error creating checkout session: {str(e)}')
+        print(f'❌ Error creating checkout session: {str(e)}')
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/session-status', methods=['GET'])
+def session_status():
+    """Get checkout session status"""
+    try:
+        session_id = request.args.get('session_id')
+        
+        if not session_id:
+            return jsonify({'error': 'session_id required'}), 400
+        
+        session = stripe.checkout.Session.retrieve(session_id)
+        
+        return jsonify({
+            'status': session.status,
+            'payment_status': session.payment_status,
+            'customer_email': session.customer_details.email if session.customer_details else None,
+            'amount_total': session.amount_total / 100 if session.amount_total else 0
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    
 @app.route('/verify-session/<session_id>', methods=['GET'])
 def verify_session(session_id):
     """Verify payment was successful"""
@@ -117,11 +139,9 @@ def webhook():
             payload, sig_header, webhook_secret
         )
     except ValueError as e:
-        # Invalid payload
         print(f'Invalid payload: {str(e)}')
         return jsonify({'error': 'Invalid payload'}), 400
     except stripe.error.SignatureVerificationError as e:
-        # Invalid signature
         print(f'Invalid signature: {str(e)}')
         return jsonify({'error': 'Invalid signature'}), 400
     
@@ -129,17 +149,12 @@ def webhook():
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
         
-        # Fulfill the order
         print('Order completed:')
         print(f"  Session ID: {session.get('id')}")
         print(f"  Customer Email: {session.get('customer_details', {}).get('email')}")
-        print(f"  Amount Total: {session.get('amount_total', 0) / 100}")
+        print(f"  Amount Total: ${session.get('amount_total', 0) / 100:.2f}")
         
-        # TODO: Add your custom logic here:
-        # - Save to database
-        # - Send confirmation email
-        # - Update inventory
-        # - Grant access/ship products
+        # TODO: Fulfill the order
     
     return jsonify({'success': True}), 200
 
@@ -152,4 +167,7 @@ def health():
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
-    app.run(debug=True, port=port)
+    print(f"\n🚀 Starting Flask server on port {port}...")
+    print(f"📍 Stripe API Version: {stripe.api_version}")
+    print(f"📍 Health check: http://localhost:{port}/health\n")
+    app.run(debug=True, port=port, host='0.0.0.0')
