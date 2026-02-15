@@ -96,6 +96,12 @@ stripe listen --forward-to localhost:5000/webhook
 # Copy the webhook secret to backend/.env
 ```
 
+If you want to test locally, you can also trigger the event locally by using the following command
+
+```bash
+stripe trigger checkout.session.completed
+```
+
 Terminal 3 - Frontend:
 
 ```bash
