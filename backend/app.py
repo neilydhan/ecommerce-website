@@ -56,8 +56,10 @@ def create_checkout_session():
     try:
         data = request.get_json()
         items = data.get('items', [])
+        shipping_option = data.get('shipping_option', 'standard') 
         
         print(f"Creating custom checkout session for {len(items)} items")
+        print(f"Shipping option: {shipping_option}") 
         
         if not items or len(items) == 0:
             return jsonify({'error': 'Cart is empty'}), 400
@@ -70,6 +72,13 @@ def create_checkout_session():
                 'quantity': item['quantity']
             })
         
+        shipping_prices = {
+            'standard': 500,  # $5.00 in cents
+            'express': 1500   # $15.00 in cents
+        }
+
+        shipping_amount = shipping_prices.get(shipping_option, 500)
+
         # Create Checkout Session with CUSTOM UI mode
         session = stripe.checkout.Session.create(
             ui_mode='custom',
@@ -77,10 +86,45 @@ def create_checkout_session():
             mode='payment',
             return_url='http://localhost:3000/success?session_id={CHECKOUT_SESSION_ID}',
             automatic_tax={'enabled': True},
+            shipping_options=[  
+                {
+                    'shipping_rate_data': {
+                        'type': 'fixed_amount',
+                        'fixed_amount': {
+                            'amount': 500,
+                            'currency': 'sgd',
+                        },
+                        'display_name': 'Standard Shipping',
+                        'delivery_estimate': {
+                            'minimum': {'unit': 'business_day', 'value': 5},
+                            'maximum': {'unit': 'business_day', 'value': 7},
+                        }
+                    },
+                },
+                {
+                    'shipping_rate_data': {
+                        'type': 'fixed_amount',
+                        'fixed_amount': {
+                            'amount': 1500,
+                            'currency': 'sgd',
+                        },
+                        'display_name': 'Express Shipping',
+                        'delivery_estimate': {
+                            'minimum': {'unit': 'business_day', 'value': 1},
+                            'maximum': {'unit': 'business_day', 'value': 2},
+                        }
+                    },
+                },
+            ],
+            metadata={  # ← NEW: Store shipping option in metadata
+                'shipping_option': shipping_option,
+                'items': str(items)  # Store items for reference
+            }
         )
         
         print(f"✅ Checkout session created: {session.id}")
         print(f"   Client secret (first 30 chars): {session.client_secret[:30]}...")
+        print(f"   Shipping: {shipping_option} (${shipping_amount/100:.2f})")
         
         # Return the client secret - make sure it's not double-encoded
         return jsonify(clientSecret=session.client_secret), 200
@@ -153,8 +197,13 @@ def webhook():
         print(f"  Session ID: {session.get('id')}")
         print(f"  Customer Email: {session.get('customer_details', {}).get('email')}")
         print(f"  Amount Total: ${session.get('amount_total', 0) / 100:.2f}")
+
+        #Log shipping information
+        print(f"  Shipping Option: {session.get('metadata', {}).get('shipping_option')}")
+        if session.get('shipping_cost'):
+            print(f"  Shipping Cost: ${session.get('shipping_cost', {}).get('amount_total', 0) / 100:.2f}")
         
-        # TODO: Fulfill the order
+        # TODO: Fulfill the order with correct shipping method
     
     return jsonify({'success': True}), 200
 

@@ -259,3 +259,103 @@
     padding: 20px 10px;
   }
 }
+
+/* Subtotal row */
+.summary-subtotal {
+  display: flex;
+  justify-content: space-between;
+  padding: 15px 0;
+  border-top: 1px solid #eee;
+  color: #666;
+  font-size: 1.1rem;
+}
+
+/* Shipping Section */
+.shipping-section {
+  margin: 20px 0;
+  padding: 20px 0;
+  border-top: 2px solid #eee;
+  border-bottom: 2px solid #eee;
+}
+
+.shipping-section h3 {
+  font-size: 1.2rem;
+  margin-bottom: 15px;
+  color: #333;
+  font-weight: 700;
+}
+
+.shipping-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.shipping-option:hover {
+  border-color: #667eea;
+  background: #f8f9ff;
+}
+
+.shipping-option.selected {
+  border-color: #667eea;
+  background: #f0f3ff;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+}
+
+.shipping-option input[type="radio"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.shipping-details {
+  flex: 1;
+}
+
+.shipping-name {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.shipping-icon {
+  font-size: 1.3rem;
+}
+
+.shipping-time {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.shipping-price {
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: #667eea;
+}
+
+.shipping-option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Updating message */
+.updating-message {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+
+.updating-message p {
+  font-size: 1.1rem;
+}
