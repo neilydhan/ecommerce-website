@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { loadStripe } from '@stripe/stripe-js';
-import { CheckoutProvider } from '@stripe/react-stripe-js/checkout';
+import { Elements } from '@stripe/react-stripe-js';
 import CheckoutForm from '../components/CheckoutForm';
 import axios from 'axios';
 import '../Checkout.css';
@@ -12,58 +12,69 @@ const Checkout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const cart = location.state?.cart || [];
-
-  //Shipping option state
+  
+  // Shipping selection
   const [shippingOption, setShippingOption] = useState('standard');
-  const [isChangingShipping, setIsChangingShipping] = useState(false);
+  
+  // Payment Intent state - NOT created yet!
+  const [clientSecret, setClientSecret] = useState(null);
+  const [paymentIntentId, setPaymentIntentId] = useState(null);
+  const [finalAmount, setFinalAmount] = useState(0);
+  const [isCreatingIntent, setIsCreatingIntent] = useState(false);
+  const [error, setError] = useState('');
 
-  // Shipping prices
   const SHIPPING_COSTS = {
     standard: 5,
     express: 15
   };
 
-  // Check if cart is empty and redirect (using useEffect, not early return)
   useEffect(() => {
     if (cart.length === 0) {
       navigate('/');
     }
   }, [cart, navigate]);
 
-  // Create the promise to fetch client secret
-  // This must be called before any conditional returns
-  const clientSecretPromise = useMemo(() => {
-    if (cart.length === 0) {
-      return Promise.reject(new Error('Cart is empty'));
-    }
+  // Calculate displayed totals
+  const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const shippingCost = SHIPPING_COSTS[shippingOption];
+  const displayTotal = subtotal + shippingCost;
 
-    const items = cart.map(item => ({
-      priceId: item.priceId,
-      quantity: item.quantity
-    }));
-
-    console.log('Creating checkout session with shipping:', shippingOption);
-
-    return axios.post('http://localhost:5000/create-checkout-session', { 
-        items,
-        shipping_option: shippingOption  //Send shipping option
-      })
-      .then(res => {
-        console.log('Checkout session created');
-        setIsChangingShipping(false);
-        return res.data.clientSecret;
-      })
-      .catch(err => {
-        console.error('Error creating checkout session:', err);
-        setIsChangingShipping(false);
-        throw err;
+  // Create Payment Intent when customer is ready
+  const proceedToPayment = async () => {
+    setIsCreatingIntent(true);
+    setError('');
+    
+    try {
+      console.log('Creating Payment Intent with:', {
+        items: cart,
+        shipping: shippingOption
       });
-  }, [cart, shippingOption]);
+      
+      const items = cart.map(item => ({
+        priceId: item.priceId,
+        quantity: item.quantity
+      }));
 
-  //Handle shipping option change
-  const handleShippingChange = (option) => {
-    setIsChangingShipping(true);
-    setShippingOption(option);
+      const response = await axios.post(
+        'http://localhost:5000/create-payment-intent',
+        {
+          items,
+          shipping_option: shippingOption
+        }
+      );
+
+      console.log('Payment Intent created:', response.data);
+      
+      setClientSecret(response.data.clientSecret);
+      setPaymentIntentId(response.data.paymentIntentId);
+      setFinalAmount(response.data.amount);
+      
+    } catch (err) {
+      console.error('Error creating payment intent:', err);
+      setError('Failed to initialize payment. Please try again.');
+    } finally {
+      setIsCreatingIntent(false);
+    }
   };
 
   const appearance = {
@@ -73,17 +84,15 @@ const Checkout = () => {
       colorBackground: '#ffffff',
       colorText: '#30313d',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      spacingUnit: '4px',
       borderRadius: '8px',
     },
   };
 
-  // Calculate total
-  const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const shippingCost = SHIPPING_COSTS[shippingOption];
-  const total = subtotal + shippingCost;
+  const options = {
+    clientSecret,
+    appearance,
+  };
 
-  // Now we can have conditional returns after all hooks
   if (cart.length === 0) {
     return (
       <div className="checkout-page">
@@ -107,7 +116,7 @@ const Checkout = () => {
           <div className="order-summary">
             <h2>Order Summary</h2>
             
-            {/* Product Items */}
+            {/* Products */}
             {cart.map(item => (
               <div key={item.productId} className="summary-item">
                 <div className="summary-item-details">
@@ -126,81 +135,103 @@ const Checkout = () => {
               <span>${subtotal.toFixed(2)}</span>
             </div>
 
-            {/* Shipping Options */}
-            <div className="shipping-section">
-              <h3>Shipping Method</h3>
-              
-              <label className={`shipping-option ${shippingOption === 'standard' ? 'selected' : ''}`}>
-                <input
-                  type="radio"
-                  name="shipping"
-                  value="standard"
-                  checked={shippingOption === 'standard'}
-                  onChange={() => handleShippingChange('standard')}
-                  disabled={isChangingShipping}
-                />
-                <div className="shipping-details">
-                  <div className="shipping-name">
-                    <span className="shipping-icon">📦</span>
-                    Standard Shipping
+            {/* Shipping Selection (only if payment not started) */}
+            {!clientSecret && (
+              <div className="shipping-section">
+                <h3>Shipping Method</h3>
+                
+                <label className={`shipping-option ${shippingOption === 'standard' ? 'selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="shipping"
+                    value="standard"
+                    checked={shippingOption === 'standard'}
+                    onChange={(e) => setShippingOption(e.target.value)}
+                  />
+                  <div className="shipping-details">
+                    <div className="shipping-name">
+                      <span className="shipping-icon">📦</span>
+                      Standard Shipping
+                    </div>
+                    <div className="shipping-time">5-7 business days</div>
                   </div>
-                  <div className="shipping-time">5-7 business days</div>
-                </div>
-                <div className="shipping-price">${SHIPPING_COSTS.standard.toFixed(2)}</div>
-              </label>
+                  <div className="shipping-price">${SHIPPING_COSTS.standard.toFixed(2)}</div>
+                </label>
 
-              <label className={`shipping-option ${shippingOption === 'express' ? 'selected' : ''}`}>
-                <input
-                  type="radio"
-                  name="shipping"
-                  value="express"
-                  checked={shippingOption === 'express'}
-                  onChange={() => handleShippingChange('express')}
-                  disabled={isChangingShipping}
-                />
-                <div className="shipping-details">
-                  <div className="shipping-name">
-                    <span className="shipping-icon">🚀</span>
-                    Express Shipping
+                <label className={`shipping-option ${shippingOption === 'express' ? 'selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="shipping"
+                    value="express"
+                    checked={shippingOption === 'express'}
+                    onChange={(e) => setShippingOption(e.target.value)}
+                  />
+                  <div className="shipping-details">
+                    <div className="shipping-name">
+                      <span className="shipping-icon">🚀</span>
+                      Express Shipping
+                    </div>
+                    <div className="shipping-time">1-2 business days</div>
                   </div>
-                  <div className="shipping-time">1-2 business days</div>
-                </div>
-                <div className="shipping-price">${SHIPPING_COSTS.express.toFixed(2)}</div>
-              </label>
-            </div>
+                  <div className="shipping-price">${SHIPPING_COSTS.express.toFixed(2)}</div>
+                </label>
+              </div>
+            )}
 
-            {/* Shipping Cost Line */}
-            <div className="summary-item">
-              <span>Shipping</span>
-              <span>${shippingCost.toFixed(2)}</span>
-            </div>
+            {/* Shipping cost line (after intent created) */}
+            {clientSecret && (
+              <div className="summary-item">
+                <span>Shipping ({shippingOption})</span>
+                <span>${shippingCost.toFixed(2)}</span>
+              </div>
+            )}
 
             {/* Total */}
             <div className="summary-total">
               <span>Total</span>
-              <span className="total-amount">${total.toFixed(2)}</span>
+              <span className="total-amount">
+                ${(clientSecret ? finalAmount : displayTotal).toFixed(2)}
+              </span>
             </div>
           </div>
 
-          {/* Payment Form */}
+          {/* Payment Section */}
           <div className="payment-section">
             <h2>Payment Information</h2>
             
-            {isChangingShipping ? (
-              <div className="updating-message">
-                <p>Updating shipping option...</p>
+            {error && (
+              <div className="error-message">
+                <div className="error">{error}</div>
+              </div>
+            )}
+            
+            {!clientSecret ? (
+              // Before Payment Intent creation
+              <div className="payment-initialize">
+                <div className="pre-payment-summary">
+                  <p><strong>Selected Shipping:</strong> {shippingOption === 'express' ? 'Express' : 'Standard'} (${shippingCost.toFixed(2)})</p>
+                  <p><strong>Order Total:</strong> ${displayTotal.toFixed(2)}</p>
+                </div>
+                <p className="payment-note">
+                  Review your order and shipping selection above, then proceed to enter payment details.
+                </p>
+                <button 
+                  className="initialize-payment-btn"
+                  onClick={proceedToPayment}
+                  disabled={isCreatingIntent}
+                >
+                  {isCreatingIntent ? 'Preparing Payment...' : 'Proceed to Payment'}
+                </button>
               </div>
             ) : (
-              <CheckoutProvider
-                key={shippingOption}  // ← NEW: Force re-render when shipping changes
-                stripe={stripePromise}
-                options={{
-                  clientSecret: clientSecretPromise,
-                  elementsOptions: { appearance },
-                }}
-              >
-                <CheckoutForm />
-              </CheckoutProvider>
+              // After Payment Intent created - show Payment Element
+              <Elements options={options} stripe={stripePromise}>
+                <CheckoutForm 
+                  amount={finalAmount} 
+                  shippingOption={shippingOption}
+                  paymentIntentId={paymentIntentId}
+                />
+              </Elements>
             )}
           </div>
         </div>

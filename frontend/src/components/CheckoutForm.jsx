@@ -1,136 +1,113 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   PaymentElement,
-  BillingAddressElement,
-  useCheckout
-} from '@stripe/react-stripe-js/checkout';
+  AddressElement,
+  useStripe,
+  useElements
+} from '@stripe/react-stripe-js';
 
-const validateEmail = async (email, checkout) => {
-  const updateResult = await checkout.updateEmail(email);
-  const isValid = updateResult.type !== "error";
+const CheckoutForm = ({ amount, shippingOption, paymentIntentId }) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const navigate = useNavigate();
 
-  return { isValid, message: !isValid ? updateResult.error.message : null };
-};
-
-const EmailInput = ({ checkout, email, setEmail, error, setError }) => {
-  const handleBlur = async () => {
-    if (!email) {
-      return;
-    }
-
-    const { isValid, message } = await validateEmail(email, checkout);
-    if (!isValid) {
-      setError(message);
-    }
-  };
-
-  const handleChange = (e) => {
-    setError(null);
-    setEmail(e.target.value);
-  };
-
-  return (
-    <div className="form-section">
-      <label htmlFor="email">
-        Email *
-      </label>
-      <input
-        id="email"
-        type="email"
-        value={email}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        className={error ? "form-input error" : "form-input"}
-      />
-      {error && <div className="email-error">{error}</div>}
-    </div>
-  );
-};
-
-const CheckoutForm = () => {
   const [email, setEmail] = useState('');
-  const [emailError, setEmailError] = useState(null);
-  const [message, setMessage] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const checkoutState = useCheckout();
-
-  if (checkoutState.type === 'loading') {
-    return (
-      <div className="checkout-loading">
-        <h2>Loading checkout...</h2>
-      </div>
-    );
-  }
-
-  if (checkoutState.type === 'error') {
-    return (
-      <div className="checkout-error">
-        <h2>Error</h2>
-        <p>{checkoutState.error.message}</p>
-      </div>
-    );
-  }
+  const [name, setName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const { checkout } = checkoutState;
-    setIsSubmitting(true);
-
-    const { isValid, message } = await validateEmail(email, checkout);
-    if (!isValid) {
-      setEmailError(message);
-      setMessage(message);
-      setIsSubmitting(false);
+    if (!stripe || !elements) {
       return;
     }
 
-    const confirmResult = await checkout.confirm();
+    setIsLoading(true);
+    setMessage('');
 
-    if (confirmResult.type === 'error') {
-      setMessage(confirmResult.error.message);
+    console.log('Confirming payment...');
+
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/payment-success?payment_intent=${paymentIntentId}`,
+        receipt_email: email,
+        payment_method_data: {
+          billing_details: {
+            name: name,
+            email: email,
+          }
+        }
+      },
+    });
+
+    if (error) {
+      console.error('Payment error:', error);
+      if (error.type === 'card_error' || error.type === 'validation_error') {
+        setMessage(error.message);
+      } else {
+        setMessage('An unexpected error occurred.');
+      }
     }
-    // If successful, Stripe redirects to return_url
 
-    setIsSubmitting(false);
+    setIsLoading(false);
   };
-
-  const { checkout } = checkoutState;
-  const totalAmount = checkout.total?.total?.amount 
-    ? `$${(checkout.total.total.amount / 100).toFixed(2)}`
-    : 'Pay now';
 
   return (
     <form onSubmit={handleSubmit} className="checkout-form">
-      <EmailInput
-        checkout={checkout}
-        email={email}
-        setEmail={setEmail}
-        error={emailError}
-        setError={setEmailError}
-      />
-      
       <div className="form-section">
-        <label>Billing Address</label>
-        <BillingAddressElement />
+        <label htmlFor="name">Full Name *</label>
+        <input
+          id="name"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="John Doe"
+          required
+          className="form-input"
+        />
       </div>
-      
+
       <div className="form-section">
-        <label>Payment</label>
-        <PaymentElement id="payment-element" />
+        <label htmlFor="email">Email *</label>
+        <input
+          id="email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="john@example.com"
+          required
+          className="form-input"
+        />
       </div>
-      
-      <button 
-        disabled={isSubmitting} 
-        className="pay-button"
-        type="submit"
-      >
-        {isSubmitting ? 'Processing...' : `Pay ${totalAmount}`}
-      </button>
-      
+
+      <div className="form-section">
+        <label>Shipping Address</label>
+        <AddressElement options={{ mode: 'shipping' }} />
+      </div>
+
+      <div className="form-section">
+        <label>Payment Information</label>
+        <PaymentElement />
+      </div>
+
       {message && <div className="payment-message error">{message}</div>}
-      
+
+      <div className="payment-summary">
+        <p><strong>Shipping:</strong> {shippingOption === 'express' ? 'Express (1-2 days)' : 'Standard (5-7 days)'}</p>
+        <p><strong>Total Amount:</strong> ${amount.toFixed(2)}</p>
+      </div>
+
+      <button 
+        type="submit" 
+        disabled={isLoading || !stripe || !elements}
+        className="pay-button"
+      >
+        {isLoading ? 'Processing...' : `Pay $${amount.toFixed(2)}`}
+      </button>
+
       <div className="secure-notice">
         🔒 Your payment information is encrypted and secure
       </div>
