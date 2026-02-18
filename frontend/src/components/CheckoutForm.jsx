@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   PaymentElement,
   AddressElement,
@@ -7,13 +6,10 @@ import {
   useElements
 } from '@stripe/react-stripe-js';
 
-const CheckoutForm = ({ amount, shippingOption, paymentIntentId }) => {
+const CheckoutForm = ({ amount, shippingOption, paymentIntentId, email, name }) => {
   const stripe = useStripe();
   const elements = useElements();
-  const navigate = useNavigate();
 
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -27,29 +23,35 @@ const CheckoutForm = ({ amount, shippingOption, paymentIntentId }) => {
     setIsLoading(true);
     setMessage('');
 
-    console.log('Confirming payment...');
+    try {
+      console.log('Confirming payment for:', email);
 
-    const { error } = await stripe.confirmPayment({
-      elements,
-      confirmParams: {
-        return_url: `${window.location.origin}/payment-success?payment_intent=${paymentIntentId}`,
-        receipt_email: email,
-        payment_method_data: {
-          billing_details: {
-            name: name,
-            email: email,
+      // Simple confirmation - customer already attached to Payment Intent
+      const { error } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/payment-success?payment_intent=${paymentIntentId}`,
+          receipt_email: email,
+          payment_method_data: {
+            billing_details: {
+              name: name,
+              email: email,
+            }
           }
-        }
-      },
-    });
+        },
+      });
 
-    if (error) {
-      console.error('Payment error:', error);
-      if (error.type === 'card_error' || error.type === 'validation_error') {
-        setMessage(error.message);
-      } else {
-        setMessage('An unexpected error occurred.');
+      if (error) {
+        console.error('Payment error:', error);
+        if (error.type === 'card_error' || error.type === 'validation_error') {
+          setMessage(error.message);
+        } else {
+          setMessage('An unexpected error occurred.');
+        }
       }
+    } catch (err) {
+      console.error('Error during payment:', err);
+      setMessage('An error occurred. Please try again.');
     }
 
     setIsLoading(false);
@@ -57,30 +59,13 @@ const CheckoutForm = ({ amount, shippingOption, paymentIntentId }) => {
 
   return (
     <form onSubmit={handleSubmit} className="checkout-form">
+      {/* Show email/name (read-only since already entered) */}
       <div className="form-section">
-        <label htmlFor="name">Full Name *</label>
-        <input
-          id="name"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="John Doe"
-          required
-          className="form-input"
-        />
-      </div>
-
-      <div className="form-section">
-        <label htmlFor="email">Email *</label>
-        <input
-          id="email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="john@example.com"
-          required
-          className="form-input"
-        />
+        <label>Contact Information</label>
+        <div className="info-display">
+          <p><strong>Name:</strong> {name}</p>
+          <p><strong>Email:</strong> {email}</p>
+        </div>
       </div>
 
       <div className="form-section">

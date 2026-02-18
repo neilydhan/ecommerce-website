@@ -13,6 +13,68 @@ stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 stripe.api_version = '2024-11-20.acacia'
 webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
 
+@app.route('/create-customer', methods=['POST'])
+def create_customer():
+    """Create a Stripe Customer"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        name = data.get('name')
+        
+        if not email:
+            return jsonify({'error': 'Email required'}), 400
+        
+        # Check if customer already exists
+        existing_customers = stripe.Customer.list(email=email, limit=1)
+        
+        if existing_customers.data:
+            customer = existing_customers.data[0]
+            print(f"✅ Found existing customer: {customer.id}")
+        else:
+            # Create new customer
+            customer = stripe.Customer.create(
+                email=email,
+                name=name,
+                metadata={
+                    'created_from': 'larrys_gym_shop'
+                }
+            )
+            print(f"✅ Created new customer: {customer.id}")
+        
+        return jsonify({
+            'customerId': customer.id,
+            'email': customer.email
+        }), 200
+        
+    except Exception as e:
+        print(f'❌ Error creating customer: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/customer-payment-methods/<customer_id>', methods=['GET'])
+def get_customer_payment_methods(customer_id):
+    """Get saved payment methods for a customer"""
+    try:
+        payment_methods = stripe.PaymentMethod.list(
+            customer=customer_id,
+            type='card'
+        )
+        
+        formatted_methods = []
+        for pm in payment_methods.data:
+            formatted_methods.append({
+                'id': pm.id,
+                'brand': pm.card.brand,
+                'last4': pm.card.last4,
+                'exp_month': pm.card.exp_month,
+                'exp_year': pm.card.exp_year
+            })
+        
+        return jsonify({'paymentMethods': formatted_methods}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/products', methods=['GET'])
 def get_products():
     """Fetch all active products from Stripe API"""
@@ -46,11 +108,13 @@ def get_products():
 
 @app.route('/create-payment-intent', methods=['POST'])
 def create_payment_intent():
-    """Create Payment Intent AFTER customer selects shipping (Deferred Intent)"""
+    """Create Payment Intent with customer support and save option"""
     try:
         data = request.get_json()
         items = data.get('items', [])
         shipping_option = data.get('shipping_option')
+        customer_id = data.get('customer_id')
+        save_payment_method = data.get('save_payment_method', False)  # ← Must receive this
         
         if not items or len(items) == 0:
             return jsonify({'error': 'Cart is empty'}), 400
@@ -59,10 +123,12 @@ def create_payment_intent():
             return jsonify({'error': 'Shipping option required'}), 400
         
         print(f"\n{'='*60}")
-        print(f"Creating Payment Intent (Deferred)")
+        print(f"Creating Payment Intent")
+        print(f"  Customer ID: {customer_id}")
+        print(f"  Save payment method: {save_payment_method}")  # ← Debug log
         print(f"{'='*60}")
         
-        # Calculate product total
+        # Calculate total
         total_amount = 0
         items_description = []
         
@@ -73,31 +139,32 @@ def create_payment_intent():
             total_amount += item_total
             items_description.append(f"{product.name} x{item['quantity']}")
         
-        # Add shipping cost
-        shipping_costs = {
-            'standard': 500,   # $5.00
-            'express': 1500    # $15.00
-        }
+        shipping_costs = {'standard': 500, 'express': 1500}
         shipping_amount = shipping_costs.get(shipping_option, 500)
         total_amount += shipping_amount
         
-        print(f"Products: {', '.join(items_description)}")
-        print(f"  Subtotal: ${(total_amount - shipping_amount)/100:.2f}")
-        print(f"  Shipping ({shipping_option}): ${shipping_amount/100:.2f}")
-        print(f"  Total: ${total_amount/100:.2f}")
-        
-        # Create Payment Intent with final amount
-        intent = stripe.PaymentIntent.create(
-            amount=total_amount,
-            currency='usd',
-            automatic_payment_methods={'enabled': True},
-            metadata={
+        # Build Payment Intent parameters
+        intent_params = {
+            'amount': total_amount,
+            'currency': 'sgd',
+            'automatic_payment_methods': {'enabled': True},
+            'metadata': {
                 'shipping_option': shipping_option,
                 'shipping_cost': shipping_amount / 100,
                 'items': str(items)
             },
-            description=f"Order: {', '.join(items_description)} | Shipping: {shipping_option}"
-        )
+            'description': f"Order: {', '.join(items_description)}"
+        }
+        
+        # Add customer and setup_future_usage HERE (at creation time)
+        if customer_id:
+            intent_params['customer'] = customer_id
+            
+            if save_payment_method:
+                intent_params['setup_future_usage'] = 'off_session'  # ← Set at creation!
+                print(f"  ✅ Will save payment method for future use")
+        
+        intent = stripe.PaymentIntent.create(**intent_params)
         
         print(f"✅ Payment Intent created: {intent.id}")
         print(f"{'='*60}\n")
@@ -114,7 +181,102 @@ def create_payment_intent():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/charge-saved-payment-method', methods=['POST'])
+def charge_saved_payment_method():
+    """Charge a saved payment method"""
+    try:
+        data = request.get_json()
+        customer_id = data.get('customer_id')
+        payment_method_id = data.get('payment_method_id')
+        items = data.get('items', [])
+        shipping_option = data.get('shipping_option')
+        
+        if not customer_id or not payment_method_id:
+            return jsonify({'error': 'Customer and payment method required'}), 400
+        
+        # Calculate total (same as before)
+        total_amount = 0
+        for item in items:
+            price = stripe.Price.retrieve(item['priceId'])
+            total_amount += price.unit_amount * item['quantity']
+        
+        shipping_costs = {'standard': 500, 'express': 1500}
+        total_amount += shipping_costs.get(shipping_option, 500)
+        
+        print(f"\n{'='*60}")
+        print(f"Charging saved payment method")
+        print(f"  Customer: {customer_id}")
+        print(f"  Payment Method: {payment_method_id}")
+        print(f"  Amount: ${total_amount/100:.2f}")
+        print(f"{'='*60}")
+        
+        # Create and confirm payment intent with saved payment method
+        intent = stripe.PaymentIntent.create(
+            amount=total_amount,
+            currency='sgd',
+            customer=customer_id,
+            payment_method=payment_method_id,
+            off_session=True,  # Customer not present
+            confirm=True,  # Confirm immediately
+            metadata={
+                'shipping_option': shipping_option,
+                'items': str(items)
+            }
+        )
+        
+        print(f"✅ Payment charged: {intent.id}")
+        print(f"{'='*60}\n")
+        
+        return jsonify({
+            'success': True,
+            'paymentIntentId': intent.id,
+            'status': intent.status
+        }), 200
+        
+    except stripe.error.CardError as e:
+        # Card was declined
+        return jsonify({'error': e.user_message}), 400
+    except Exception as e:
+        print(f'❌ Error charging saved payment method: {str(e)}')
+        return jsonify({'error': str(e)}), 500
 
+@app.route('/update-payment-intent', methods=['POST'])
+def update_payment_intent():
+    """Update Payment Intent to add customer and save payment method"""
+    try:
+        data = request.get_json()
+        payment_intent_id = data.get('payment_intent_id')
+        customer_id = data.get('customer_id')
+        setup_future_usage = data.get('setup_future_usage')
+        
+        print(f"\n{'='*60}")
+        print(f"Updating Payment Intent: {payment_intent_id}")
+        print(f"  Adding customer: {customer_id}")
+        print(f"  Setting setup_future_usage: {setup_future_usage}")
+        print(f"{'='*60}")
+        
+        # Update the Payment Intent
+        update_params = {
+            'customer': customer_id
+        }
+        
+        if setup_future_usage:
+            update_params['setup_future_usage'] = setup_future_usage
+        
+        intent = stripe.PaymentIntent.modify(
+            payment_intent_id,
+            **update_params
+        )
+        
+        print(f"✅ Payment Intent updated successfully")
+        print(f"{'='*60}\n")
+        
+        return jsonify({'success': True}), 200
+        
+    except Exception as e:
+        print(f'❌ Error updating payment intent: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+    
 @app.route('/payment-intent-status/<intent_id>', methods=['GET'])
 def payment_intent_status(intent_id):
     """Get payment intent status"""

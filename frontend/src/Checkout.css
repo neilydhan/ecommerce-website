@@ -656,3 +656,341 @@
     font-size: 1rem;
   }
 }
+/* ========== Saved Payment Methods ========== */
+
+.saved-payment-methods {
+  padding: 30px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  margin-bottom: 25px;
+  border: 2px solid #e0e0e0;
+}
+
+.saved-payment-methods h3 {
+  font-size: 1.4rem;
+  color: #333;
+  margin-bottom: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.saved-methods-subtitle {
+  color: #666;
+  margin-bottom: 20px;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.saved-methods-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.saved-method-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 18px 20px;
+  background: white;
+  border: 2px solid #ddd;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.saved-method-item:hover {
+  border-color: #667eea;
+  background: #f8f9ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.method-icon {
+  font-size: 2rem;
+  flex-shrink: 0;
+}
+
+.method-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.method-brand {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #667eea;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.method-number {
+  font-size: 1.1rem;
+  color: #333;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.method-expiry {
+  font-size: 0.95rem;
+  color: #666;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.use-new-card-btn {
+  width: 100%;
+  background: white;
+  color: #667eea;
+  border: 2px dashed #667eea;
+  padding: 16px;
+  border-radius: 10px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.use-new-card-btn:hover {
+  background: #f8f9ff;
+  border-color: #5568d3;
+  transform: translateY(-2px);
+}
+
+.show-saved-methods-link {
+  background: transparent;
+  color: #667eea;
+  border: none;
+  padding: 12px 0;
+  margin-top: 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.2s;
+}
+
+.show-saved-methods-link:hover {
+  color: #5568d3;
+}
+
+/* Saved Method Confirmation */
+.saved-method-confirmation {
+  padding: 30px;
+  text-align: center;
+}
+
+.selected-method-display {
+  margin-bottom: 30px;
+}
+
+.selected-method-display h3 {
+  font-size: 1.3rem;
+  color: #333;
+  margin-bottom: 20px;
+  font-weight: 700;
+}
+
+.saved-method-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 25px 30px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 12px;
+  border: 2px solid #667eea;
+  margin: 0 auto;
+  max-width: 400px;
+}
+
+.card-brand {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #667eea;
+  background: white;
+  padding: 8px 16px;
+  border-radius: 6px;
+}
+
+.card-number {
+  font-size: 1.3rem;
+  color: #333;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+.card-expiry {
+  font-size: 0.95rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.change-method-link {
+  background: transparent;
+  color: #667eea;
+  border: none;
+  padding: 12px;
+  margin-top: 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.2s;
+}
+
+.change-method-link:hover:not(:disabled) {
+  color: #5568d3;
+}
+
+.change-method-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Save Payment Method Checkbox */
+.save-payment-section {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 10px;
+  margin: 20px 0;
+  border-left: 4px solid #667eea;
+}
+
+.save-payment-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.save-payment-checkbox input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #667eea;
+  flex-shrink: 0;
+}
+
+.checkbox-label {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #333;
+  cursor: pointer;
+  user-select: none;
+}
+
+.save-payment-note {
+  font-size: 0.9rem;
+  color: #666;
+  line-height: 1.5;
+  margin-left: 32px;
+  margin-top: 5px;
+}
+
+/* Responsive - Saved Payment Methods */
+@media (max-width: 768px) {
+  .saved-payment-methods {
+    padding: 20px;
+  }
+
+  .saved-method-item {
+    padding: 15px;
+    gap: 12px;
+  }
+
+  .method-icon {
+    font-size: 1.8rem;
+  }
+
+  .method-number {
+    font-size: 1rem;
+  }
+
+  .saved-method-card {
+    flex-direction: column;
+    gap: 12px;
+    padding: 20px;
+  }
+
+  .card-number {
+    font-size: 1.1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .saved-payment-methods h3 {
+    font-size: 1.2rem;
+  }
+
+  .saved-methods-subtitle {
+    font-size: 0.95rem;
+  }
+
+  .method-brand {
+    font-size: 0.85rem;
+  }
+
+  .method-number {
+    font-size: 0.95rem;
+  }
+
+  .method-expiry {
+    font-size: 0.85rem;
+  }
+
+  .use-new-card-btn {
+    font-size: 1rem;
+    padding: 14px;
+  }
+
+  .checkbox-label {
+    font-size: 1rem;
+  }
+
+  .save-payment-note {
+    font-size: 0.85rem;
+    margin-left: 0;
+    margin-top: 10px;
+  }
+}
+
+/* Email Collection Form */
+.email-collection-form {
+  padding: 30px;
+}
+
+.email-collection-form h3 {
+  font-size: 1.4rem;
+  color: #333;
+  margin-bottom: 25px;
+  font-weight: 700;
+}
+
+.info-display {
+  background: #f8f9fa;
+  padding: 15px 20px;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.info-display p {
+  margin: 8px 0;
+  font-size: 1rem;
+  color: #333;
+}
+
+.info-display strong {
+  font-weight: 700;
+  color: #667eea;
+  margin-right: 8px;
+}
