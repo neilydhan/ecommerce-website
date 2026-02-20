@@ -323,6 +323,44 @@ def webhook():
     
     return jsonify({'success': True}), 200
 
+@app.route('/customer-details/<customer_id>', methods=['GET'])
+def get_customer_details(customer_id):
+    """Get customer details from Stripe"""
+    try:
+        customer = stripe.Customer.retrieve(customer_id)
+        
+        return jsonify({
+            'id': customer.id,
+            'email': customer.email,
+            'name': customer.name,
+            'created': customer.created,
+            'metadata': customer.metadata
+        }), 200
+        
+    except Exception as e:
+        print(f'❌ Error retrieving customer: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/payment-method/<payment_method_id>', methods=['DELETE'])
+def delete_payment_method(payment_method_id):
+    """Detach/delete a payment method"""
+    try:
+        print(f"Deleting payment method: {payment_method_id}")
+        
+        # Detach payment method from customer
+        payment_method = stripe.PaymentMethod.detach(payment_method_id)
+        
+        print(f"✅ Payment method {payment_method_id} removed")
+        
+        return jsonify({
+            'success': True,
+            'payment_method_id': payment_method.id
+        }), 200
+        
+    except Exception as e:
+        print(f'❌ Error deleting payment method: {str(e)}')
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])
 def health():

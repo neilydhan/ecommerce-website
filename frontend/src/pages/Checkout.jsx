@@ -137,6 +137,8 @@ const Checkout = () => {
         // Save customer info
         localStorage.setItem('customerId', finalCustomerId);
         localStorage.setItem('customerEmail', tempEmail);
+        localStorage.setItem('customerName', customerResponse.data.name || tempName);
+
         setCustomerId(finalCustomerId);
         setCustomerEmail(tempEmail);
         
