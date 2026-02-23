@@ -11,11 +11,17 @@ const Header = () => {
         <p className="subtitle">Official Merchandise & Gear</p>
       </div>
       
-      {customerId && (
-        <Link to="/profile" className="profile-link">
-          👤 My Profile
+      <nav className="header-nav">
+        <Link to="/membership" className="nav-link">
+          🏋️ Memberships
         </Link>
-      )}
+        
+        {customerId && (
+          <Link to="/profile" className="nav-link profile-link">
+            👤 My Profile
+          </Link>
+        )}
+      </nav>
     </header>
   );
 };

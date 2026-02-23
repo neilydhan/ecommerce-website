@@ -17,12 +17,16 @@ body {
 
 /* Header */
 .header {
-  text-align: center;
+  position: relative;
   padding: 40px 20px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border-radius: 10px;
   margin-bottom: 30px;
+}
+
+.header-content {
+  text-align: center;
 }
 
 .header h1 {
@@ -33,6 +37,31 @@ body {
 .subtitle {
   font-size: 1.2rem;
   opacity: 0.9;
+}
+
+/* Header Navigation */
+.header-nav {
+  position: absolute;
+  top: 20px;
+  right: 30px;
+  display: flex;
+  gap: 15px;
+}
+
+.nav-link {
+  color: white;
+  text-decoration: none;
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 10px 20px;
+  border: 2px solid white;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.nav-link:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
 }
 
 /* Shopping Cart */
@@ -163,13 +192,25 @@ body {
 .product-image {
   width: 100%;
   height: 200px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 4rem;
   margin-bottom: 15px;
+  overflow: hidden;
+}
+
+.product-image-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 20px;
+}
+
+.product-image-placeholder {
+  font-size: 4rem;
 }
 
 .product-name {
@@ -190,31 +231,6 @@ body {
   font-weight: bold;
   color: #667eea;
   margin-bottom: 15px;
-}
-
-.product-image {
-  width: 100%;
-  height: 200px;  /* You can adjust this - try 180px or 220px */
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 15px;
-  overflow: hidden;
-  position: relative;
-}
-
-.product-image-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;  /* Changed from 'cover' to 'contain' */
-  background: white;    /* Add white background so images stand out */
-  padding: 10px;        /* Add some padding around the image */
-}
-
-.product-image-placeholder {
-  font-size: 4rem;
 }
 
 .quantity-selector {
@@ -372,6 +388,12 @@ body {
   margin: 10px 0;
 }
 
+.info-note {
+  font-size: 0.95rem;
+  opacity: 0.9;
+  margin-top: 15px;
+}
+
 .button {
   display: inline-block;
   background: white;
@@ -397,6 +419,13 @@ body {
     font-size: 1.8rem;
   }
 
+  .header-nav {
+    position: static;
+    justify-content: center;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+
   .products-container {
     grid-template-columns: 1fr;
   }
@@ -404,45 +433,4 @@ body {
   .cart-section {
     position: relative;
   }
-}
-
-.header {
-  position: relative;
-}
-
-.header-content {
-  text-align: center;
-}
-
-.profile-link {
-  position: absolute;
-  top: 20px;
-  right: 30px;
-  color: white;
-  text-decoration: none;
-  font-size: 1rem;
-  font-weight: 600;
-  padding: 10px 20px;
-  border: 2px solid white;
-  border-radius: 8px;
-  transition: all 0.2s;
-}
-
-.profile-link:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: translateY(-2px);
-}
-
-@media (max-width: 768px) {
-  .profile-link {
-    position: static;
-    display: inline-block;
-    margin-top: 15px;
-  }
-
-  .info-note {
-  font-size: 0.95rem;
-  opacity: 0.9;
-  margin-top: 15px;
-}
 }

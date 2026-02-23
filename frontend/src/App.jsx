@@ -7,6 +7,9 @@ import './App.css';
 import Profile from './pages/Profile';
 import AddPaymentMethod from './pages/AddPaymentMethod'; 
 import SetupComplete from './pages/SetupComplete';
+import Membership from './pages/Membership';
+import SubscriptionSuccess from './pages/SubscriptionSuccess';
+
 
 function App() {
   return (
@@ -19,6 +22,8 @@ function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/add-payment-method" element={<AddPaymentMethod />} /> 
           <Route path="/setup-complete" element={<SetupComplete />} />
+          <Route path="/membership" element={<Membership />} /> 
+          <Route path="/subscription-success" element={<SubscriptionSuccess />} />
         </Routes>
       </div>
     </Router>

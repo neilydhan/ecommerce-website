@@ -422,4 +422,107 @@
     width: 100%;
   }
 }
+
+/* Subscriptions Section */
+.subscriptions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.subscription-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 25px;
+  background: #f8f9fa;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+.subscription-card:hover {
+  border-color: #667eea;
+  background: #f0f3ff;
+}
+
+.subscription-info h3 {
+  color: #333;
+  font-size: 1.3rem;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.subscription-price {
+  color: #667eea;
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.subscription-status {
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  display: inline-block;
+}
+
+.subscription-status.active {
+  background: #e6f7e6;
+  color: #2d7a2d;
+}
+
+.subscription-status.canceled {
+  background: #ffe6e6;
+  color: #cc0000;
+}
+
+.canceling-notice {
+  color: #ff8800;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.subscription-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cancel-subscription-btn {
+  background: #ff4444;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.cancel-subscription-btn:hover {
+  background: #cc0000;
+  transform: scale(1.05);
+}
+
+@media (max-width: 768px) {
+  .subscription-card {
+    flex-direction: column;
+    gap: 20px;
+    align-items: flex-start;
+  }
+
+  .subscription-actions {
+    width: 100%;
+  }
+
+  .cancel-subscription-btn {
+    width: 100%;
+  }
+}
+
 }

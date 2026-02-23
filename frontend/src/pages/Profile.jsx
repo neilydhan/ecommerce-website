@@ -15,6 +15,8 @@ const Profile = () => {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
+  const [currentSubscriptions, setCurrentSubscriptions] = useState([]);
+
   useEffect(() => {
     if (!customerId) {
       navigate('/');
@@ -47,6 +49,12 @@ const Profile = () => {
         `http://localhost:5000/customer-payment-methods/${customerId}`
       );
       setSavedPaymentMethods(paymentMethodsResponse.data.paymentMethods);
+
+      // In loadCustomerData function, add:
+      const subscriptionsResponse = await axios.get(
+        `http://localhost:5000/customer-subscriptions/${customerId}`
+      );
+      setCurrentSubscriptions(subscriptionsResponse.data.subscriptions);
       
       setLoading(false);
     } catch (err) {
@@ -93,6 +101,27 @@ const Profile = () => {
     } catch (err) {
       console.error('Error deleting payment method:', err);
       alert('Failed to remove payment method');
+    }
+  };
+
+
+  // Add cancel handler:
+  const handleCancelSubscription = async (subscriptionId) => {
+    if (!window.confirm('Are you sure you want to cancel this subscription? It will remain active until the end of your billing period.')) {
+      return;
+    }
+
+    try {
+      await axios.post(`http://localhost:5000/cancel-subscription/${subscriptionId}`, {
+        cancel_immediately: false
+      });
+      
+      // Reload data
+      loadCustomerData();
+      alert('Subscription will be canceled at the end of your billing period');
+    } catch (err) {
+      console.error('Error canceling subscription:', err);
+      alert('Failed to cancel subscription');
     }
   };
 
@@ -235,6 +264,60 @@ const Profile = () => {
                     >
                       🗑️ Remove
                     </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Subscriptions Section */}
+        <div className="profile-section">
+          <div className="section-header">
+            <h2>📅 My Subscriptions</h2>
+            <Link to="/membership" className="add-payment-method-link">
+              + Subscribe
+            </Link>
+          </div>
+          
+          {currentSubscriptions.length === 0 ? (
+            <div className="empty-state">
+              <p className="empty-icon">📅</p>
+              <p className="empty-text">No active subscriptions</p>
+              <p className="empty-subtext">
+                Subscribe to a membership plan for unlimited access
+              </p>
+              <Link to="/membership" className="button">
+                View Membership Plans
+              </Link>
+            </div>
+          ) : (
+            <div className="subscriptions-list">
+              {currentSubscriptions.map((subscription) => (
+                <div key={subscription.id} className="subscription-card">
+                  <div className="subscription-info">
+                    <h3>{subscription.product_name}</h3>
+                    <p className="subscription-price">
+                      ${subscription.amount} / {subscription.interval}
+                    </p>
+                    <p className={`subscription-status ${subscription.status}`}>
+                      Status: {subscription.status}
+                    </p>
+                    {subscription.cancel_at_period_end && (
+                      <p className="canceling-notice">
+                        ⚠️ Cancels on {new Date(subscription.current_period_end * 1000).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                  
+                  <div className="subscription-actions">
+                    {!subscription.cancel_at_period_end && subscription.status === 'active' && (
+                      <button 
+                        className="cancel-subscription-btn"
+                        onClick={() => handleCancelSubscription(subscription.id)}
+                      >
+                        Cancel Subscription
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

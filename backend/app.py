@@ -1,3 +1,5 @@
+import time
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import stripe
@@ -52,29 +54,42 @@ def create_customer():
 
 @app.route('/api/products', methods=['GET'])
 def get_products():
-    """Fetch all active products from Stripe API"""
+    """Fetch all active one-time purchase products (exclude subscriptions)"""
     try:
-        products = stripe.Product.list(active=True, expand=['data.default_price'])
+        # Fetch all active products with their default prices
+        products = stripe.Product.list(
+            active=True,
+            expand=['data.default_price']
+        )
         
+        # Format the response - ONLY include one-time products
         formatted_products = []
         for product in products.data:
+            # Skip if no price
+            if not product.default_price:
+                continue
+            
+            # ← KEY: Skip subscription products (recurring prices)
+            if hasattr(product.default_price, 'recurring') and product.default_price.recurring:
+                print(f"  Skipping subscription product: {product.name}")
+                continue
+            
+            # Only include one-time purchase products
             product_data = {
                 'id': product.id,
                 'name': product.name,
                 'description': product.description,
                 'images': product.images,
-                'price': None
-            }
-            
-            if product.default_price:
-                product_data['price'] = {
+                'price': {
                     'id': product.default_price.id,
                     'amount': product.default_price.unit_amount / 100,
                     'currency': product.default_price.currency.upper()
                 }
+            }
             
             formatted_products.append(product_data)
         
+        print(f"✅ Returning {len(formatted_products)} one-time purchase products")
         return jsonify({'products': formatted_products}), 200
         
     except Exception as e:
@@ -454,26 +469,43 @@ def set_default_payment_method():
 def get_customer_details(customer_id):
     """Get customer details including default payment method"""
     try:
+        print(f"\nRetrieving customer: {customer_id}")
+        
         customer = stripe.Customer.retrieve(customer_id)
         
-        # Get default payment method ID
-        default_pm_id = None
-        if customer.invoice_settings and customer.invoice_settings.default_payment_method:
-            default_pm_id = customer.invoice_settings.default_payment_method
+        print(f"  Customer object type: {type(customer)}")
+        print(f"  Available keys: {list(customer.keys()) if hasattr(customer, 'keys') else 'N/A'}")
         
-        return jsonify({
+        # Safe access to all properties
+        default_pm_id = None
+        try:
+            if hasattr(customer, 'invoice_settings') and customer.invoice_settings:
+                default_pm_id = getattr(customer.invoice_settings, 'default_payment_method', None)
+        except Exception as e:
+            print(f"  Warning: invoice_settings error: {e}")
+        
+        # Build response with safe access
+        response_data = {
             'id': customer.id,
-            'email': customer.email,
-            'name': customer.name,
-            'created': customer.created,
+            'email': getattr(customer, 'email', None),
+            'name': getattr(customer, 'name', None),
+            'created': getattr(customer, 'created', None),
             'default_payment_method': default_pm_id,
-            'metadata': customer.metadata
-        }), 200
+            'metadata': dict(customer.metadata) if hasattr(customer, 'metadata') else {}
+        }
+        
+        print(f"✅ Customer details retrieved:")
+        print(f"   Email: {response_data['email']}")
+        print(f"   Name: {response_data['name']}")
+        print(f"   Default PM: {default_pm_id}\n")
+        
+        return jsonify(response_data), 200
         
     except Exception as e:
         print(f'❌ Error retrieving customer: {str(e)}')
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/customer-payment-methods/<customer_id>', methods=['GET'])
 def get_customer_payment_methods(customer_id):
@@ -509,6 +541,265 @@ def get_customer_payment_methods(customer_id):
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# ========== SUBSCRIPTION ENDPOINTS ==========
+
+@app.route('/api/subscription-plans', methods=['GET'])
+def get_subscription_plans():
+    """Get all available subscription plans"""
+    try:
+        print("Fetching subscription plans...")
+        
+        # Fetch all recurring products
+        products = stripe.Product.list(
+            active=True,
+            expand=['data.default_price']
+        )
+        
+        subscription_plans = []
+        
+        for product in products.data:
+            # Only include products with recurring prices
+            if product.default_price and product.default_price.recurring:
+                plan_data = {
+                    'id': product.id,
+                    'name': product.name,
+                    'description': product.description,
+                    'images': product.images,
+                    'price': {
+                        'id': product.default_price.id,
+                        'amount': product.default_price.unit_amount / 100,
+                        'currency': product.default_price.currency.upper(),
+                        'interval': product.default_price.recurring.interval,
+                        'interval_count': product.default_price.recurring.interval_count
+                    },
+                    'features': product.metadata.get('features', '').split(',') if product.metadata.get('features') else []
+                }
+                subscription_plans.append(plan_data)
+        
+        print(f"✅ Found {len(subscription_plans)} subscription plans")
+        return jsonify({'plans': subscription_plans}), 200
+        
+    except Exception as e:
+        print(f'❌ Error fetching plans: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/create-subscription', methods=['POST'])
+def create_subscription():
+    """Create a subscription for a customer"""
+    try:
+        data = request.get_json()
+        customer_id = data.get('customer_id')
+        price_id = data.get('price_id')
+        payment_method_id = data.get('payment_method_id')
+        
+        if not customer_id or not price_id:
+            return jsonify({'error': 'Customer and price required'}), 400
+        
+        print(f"\n{'='*60}")
+        print(f"Creating Subscription")
+        print(f"  Customer: {customer_id}")
+        print(f"  Price: {price_id}")
+        print(f"{'='*60}")
+        
+        subscription_params = {
+            'customer': customer_id,
+            'items': [{'price': price_id}],
+            'payment_behavior': 'default_incomplete',
+            'payment_settings': {
+                'save_default_payment_method': 'on_subscription'
+            },
+            'expand': ['latest_invoice.payment_intent']
+        }
+        
+        # If payment method provided, use it
+        if payment_method_id:
+            subscription_params['default_payment_method'] = payment_method_id
+        
+        subscription = stripe.Subscription.create(**subscription_params)
+        
+        print(f"✅ Subscription created: {subscription.id}")
+        print(f"   Status: {subscription.status}")
+        print(f"{'='*60}\n")
+        
+        return jsonify({
+            'subscriptionId': subscription.id,
+            'clientSecret': subscription.latest_invoice.payment_intent.client_secret,
+            'status': subscription.status
+        }), 200
+        
+    except Exception as e:
+        print(f'❌ Error creating subscription: {str(e)}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/customer-subscriptions/<customer_id>', methods=['GET'])
+def get_customer_subscriptions(customer_id):
+    """Get all subscriptions for a customer"""
+    try:
+        print(f"\nFetching subscriptions for customer: {customer_id}")
+        
+        # Fetch subscriptions with proper expansion
+        subscriptions = stripe.Subscription.list(
+            customer=customer_id,
+            status='all',
+            limit=100
+        )
+        
+        print(f"Found {len(subscriptions.data)} subscriptions")
+        
+        formatted_subs = []
+        for sub in subscriptions.data:
+            try:
+                product_name = 'Unknown Product'
+                amount = 0
+                interval = 'month'
+                
+                # ← FIX: Access items correctly
+                # sub.items is a StripeObject, not a method
+                # Access via dictionary notation
+                items_list = sub.get('items', {})
+                
+                if items_list and hasattr(items_list, 'data') and len(items_list.data) > 0:
+                    first_item = items_list.data[0]
+                    
+                    # Get price
+                    price = first_item.get('price') or first_item.price
+                    
+                    if price:
+                        amount = getattr(price, 'unit_amount', 0) / 100 if hasattr(price, 'unit_amount') else 0
+                        
+                        # Get interval
+                        if hasattr(price, 'recurring') and price.recurring:
+                            interval = price.recurring.interval
+                        
+                        # Get product name
+                        product_id = getattr(price, 'product', None)
+                        if product_id:
+                            if isinstance(product_id, str):
+                                # Product is an ID, fetch it
+                                try:
+                                    product = stripe.Product.retrieve(product_id)
+                                    product_name = product.name
+                                except:
+                                    product_name = f"Product {product_id[:10]}..."
+                            else:
+                                # Product is already an object
+                                product_name = getattr(product_id, 'name', 'Unknown Product')
+                
+                formatted_sub = {
+                    'id': sub.id,
+                    'status': sub.status,
+                    'current_period_start': sub.current_period_start,
+                    'current_period_end': sub.current_period_end,
+                    'cancel_at_period_end': sub.cancel_at_period_end,
+                    'product_name': product_name,
+                    'amount': amount,
+                    'interval': interval,
+                    'created': sub.created
+                }
+                
+                formatted_subs.append(formatted_sub)
+                print(f"  ✅ Subscription: {product_name} - ${amount}/{interval} ({sub.status})")
+                
+            except Exception as e:
+                print(f"  ⚠️  Warning: Error processing subscription {sub.id}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+        
+        print(f"✅ Returning {len(formatted_subs)} subscriptions\n")
+        return jsonify({'subscriptions': formatted_subs}), 200
+        
+    except Exception as e:
+        print(f'❌ Error fetching subscriptions: {str(e)}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/cancel-subscription/<subscription_id>', methods=['POST'])
+def cancel_subscription(subscription_id):
+    """Cancel a subscription"""
+    try:
+        data = request.get_json()
+        cancel_immediately = data.get('cancel_immediately', False)
+        
+        print(f"\nCanceling subscription: {subscription_id}")
+        
+        # ← FIX: Check subscription status first
+        subscription = stripe.Subscription.retrieve(subscription_id)
+        
+        print(f"  Current status: {subscription.status}")
+        
+        # Can only cancel active, trialing, or past_due subscriptions
+        if subscription.status in ['incomplete', 'incomplete_expired', 'canceled']:
+            print(f"  ❌ Cannot cancel subscription with status: {subscription.status}")
+            return jsonify({
+                'error': f'Subscription is {subscription.status} and cannot be canceled'
+            }), 400
+        
+        if cancel_immediately:
+            # Cancel immediately
+            subscription = stripe.Subscription.cancel(subscription_id)
+            print(f"✅ Subscription canceled immediately")
+        else:
+            # Cancel at end of period
+            subscription = stripe.Subscription.modify(
+                subscription_id,
+                cancel_at_period_end=True
+            )
+            print(f"✅ Subscription will cancel at period end")
+        
+        return jsonify({
+            'success': True,
+            'subscription_id': subscription.id,
+            'status': subscription.status,
+            'cancel_at_period_end': subscription.cancel_at_period_end
+        }), 200
+        
+    except stripe.error.InvalidRequestError as e:
+        print(f'❌ Invalid request: {str(e)}')
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        print(f'❌ Error canceling subscription: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/report-usage', methods=['POST'])
+def report_usage():
+    """Report metered usage for Plus membership day passes"""
+    try:
+        data = request.get_json()
+        subscription_item_id = data.get('subscription_item_id')
+        quantity = data.get('quantity', 1)
+        
+        if not subscription_item_id:
+            return jsonify({'error': 'Subscription item ID required'}), 400
+        
+        print(f"Recording usage: {quantity} day pass(es)")
+        
+        # Record usage
+        usage_record = stripe.SubscriptionItem.create_usage_record(
+            subscription_item_id,
+            quantity=quantity,
+            timestamp=int(time.time()),
+            action='increment'
+        )
+        
+        print(f"✅ Usage recorded: {usage_record.id}")
+        
+        return jsonify({
+            'success': True,
+            'usage_record_id': usage_record.id,
+            'quantity': quantity
+        }), 200
+        
+    except Exception as e:
+        print(f'❌ Error recording usage: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/health', methods=['GET'])
 def health():
