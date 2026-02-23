@@ -1,44 +1,46 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import '../Profile.css';
 
 const Profile = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   
   const [customerId, setCustomerId] = useState(localStorage.getItem('customerId'));
-  const [customerEmail, setCustomerEmail] = useState(localStorage.getItem('customerEmail'));
-  const [customerName, setCustomerName] = useState(localStorage.getItem('customerName'));
-  
   const [customerData, setCustomerData] = useState(null);
   const [savedPaymentMethods, setSavedPaymentMethods] = useState([]);
+  const [defaultPaymentMethodId, setDefaultPaymentMethodId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    // Redirect if not logged in (no customer ID)
     if (!customerId) {
       navigate('/');
       return;
     }
 
     loadCustomerData();
-  }, [customerId, navigate]);
+    
+    // Show success message if redirected from add payment method
+    if (searchParams.get('added') === 'success') {
+      setSuccessMessage('Payment method added successfully!');
+      setTimeout(() => setSuccessMessage(''), 5000);
+    }
+  }, [customerId, navigate, searchParams]);
 
   const loadCustomerData = async () => {
     setLoading(true);
     setError('');
     
     try {
-      // Fetch customer details from Stripe
+      // Fetch customer details
       const customerResponse = await axios.get(
         `http://localhost:5000/customer-details/${customerId}`
       );
       setCustomerData(customerResponse.data);
-      
-      // Update localStorage with fresh data
-      localStorage.setItem('customerName', customerResponse.data.name || '');
-      localStorage.setItem('customerEmail', customerResponse.data.email || '');
+      setDefaultPaymentMethodId(customerResponse.data.default_payment_method);
       
       // Fetch saved payment methods
       const paymentMethodsResponse = await axios.get(
@@ -54,6 +56,21 @@ const Profile = () => {
     }
   };
 
+  const handleSetDefault = async (paymentMethodId) => {
+    try {
+      await axios.post('http://localhost:5000/set-default-payment-method', {
+        customer_id: customerId,
+        payment_method_id: paymentMethodId
+      });
+      
+      setDefaultPaymentMethodId(paymentMethodId);
+      alert('Default payment method updated!');
+    } catch (err) {
+      console.error('Error setting default:', err);
+      alert('Failed to set as default');
+    }
+  };
+
   const handleDeletePaymentMethod = async (paymentMethodId) => {
     if (!window.confirm('Are you sure you want to remove this payment method?')) {
       return;
@@ -64,10 +81,13 @@ const Profile = () => {
         `http://localhost:5000/payment-method/${paymentMethodId}`
       );
       
-      // Refresh payment methods
       setSavedPaymentMethods(prev => 
         prev.filter(pm => pm.id !== paymentMethodId)
       );
+      
+      if (paymentMethodId === defaultPaymentMethodId) {
+        setDefaultPaymentMethodId(null);
+      }
       
       alert('Payment method removed successfully');
     } catch (err) {
@@ -119,7 +139,6 @@ const Profile = () => {
   return (
     <div className="profile-page">
       <div className="profile-container">
-        {/* Header */}
         <div className="profile-header">
           <h1>My Profile</h1>
           <Link to="/" className="back-to-shop-link">
@@ -127,7 +146,13 @@ const Profile = () => {
           </Link>
         </div>
 
-        {/* Customer Information Card */}
+        {successMessage && (
+          <div className="success-banner">
+            ✅ {successMessage}
+          </div>
+        )}
+
+        {/* Account Information */}
         <div className="profile-section">
           <div className="section-header">
             <h2>👤 Account Information</h2>
@@ -155,11 +180,11 @@ const Profile = () => {
           </button>
         </div>
 
-        {/* Saved Payment Methods Card */}
+        {/* Saved Payment Methods */}
         <div className="profile-section">
           <div className="section-header">
             <h2>💳 Saved Payment Methods</h2>
-            <Link to="/checkout" className="add-payment-method-link">
+            <Link to="/add-payment-method" className="add-payment-method-link">
               + Add New
             </Link>
           </div>
@@ -169,10 +194,10 @@ const Profile = () => {
               <p className="empty-icon">💳</p>
               <p className="empty-text">No saved payment methods yet</p>
               <p className="empty-subtext">
-                Add a payment method during checkout to save it for future purchases
+                Add a payment method to save time on future purchases
               </p>
-              <Link to="/" className="button">
-                Start Shopping
+              <Link to="/add-payment-method" className="button">
+                Add Payment Method
               </Link>
             </div>
           ) : (
@@ -182,7 +207,12 @@ const Profile = () => {
                   <div className="payment-method-info">
                     <span className="card-icon">{getCardBrandIcon(method.brand)}</span>
                     <div className="card-details">
-                      <span className="card-brand-text">{method.brand.toUpperCase()}</span>
+                      <div className="card-header">
+                        <span className="card-brand-text">{method.brand.toUpperCase()}</span>
+                        {method.is_default && (
+                          <span className="default-badge">⭐ DEFAULT</span>
+                        )}
+                      </div>
                       <span className="card-number">•••• •••• •••• {method.last4}</span>
                       <span className="card-expiry">
                         Expires {method.exp_month}/{method.exp_year}
@@ -190,13 +220,22 @@ const Profile = () => {
                     </div>
                   </div>
                   
-                  <button 
-                    className="delete-payment-method-btn"
-                    onClick={() => handleDeletePaymentMethod(method.id)}
-                    title="Remove payment method"
-                  >
-                    🗑️ Remove
-                  </button>
+                  <div className="payment-method-actions">
+                    {!method.is_default && (
+                      <button 
+                        className="set-default-btn"
+                        onClick={() => handleSetDefault(method.id)}
+                      >
+                        Set as Default
+                      </button>
+                    )}
+                    <button 
+                      className="delete-payment-method-btn"
+                      onClick={() => handleDeletePaymentMethod(method.id)}
+                    >
+                      🗑️ Remove
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

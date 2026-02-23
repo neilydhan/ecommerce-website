@@ -50,31 +50,6 @@ def create_customer():
         print(f'❌ Error creating customer: {str(e)}')
         return jsonify({'error': str(e)}), 500
 
-@app.route('/customer-payment-methods/<customer_id>', methods=['GET'])
-def get_customer_payment_methods(customer_id):
-    """Get saved payment methods for a customer"""
-    try:
-        payment_methods = stripe.PaymentMethod.list(
-            customer=customer_id,
-            type='card'
-        )
-        
-        formatted_methods = []
-        for pm in payment_methods.data:
-            formatted_methods.append({
-                'id': pm.id,
-                'brand': pm.card.brand,
-                'last4': pm.card.last4,
-                'exp_month': pm.card.exp_month,
-                'exp_year': pm.card.exp_year
-            })
-        
-        return jsonify({'paymentMethods': formatted_methods}), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
 @app.route('/api/products', methods=['GET'])
 def get_products():
     """Fetch all active products from Stripe API"""
@@ -323,24 +298,6 @@ def webhook():
     
     return jsonify({'success': True}), 200
 
-@app.route('/customer-details/<customer_id>', methods=['GET'])
-def get_customer_details(customer_id):
-    """Get customer details from Stripe"""
-    try:
-        customer = stripe.Customer.retrieve(customer_id)
-        
-        return jsonify({
-            'id': customer.id,
-            'email': customer.email,
-            'name': customer.name,
-            'created': customer.created,
-            'metadata': customer.metadata
-        }), 200
-        
-    except Exception as e:
-        print(f'❌ Error retrieving customer: {str(e)}')
-        return jsonify({'error': str(e)}), 500
-
 
 @app.route('/payment-method/<payment_method_id>', methods=['DELETE'])
 def delete_payment_method(payment_method_id):
@@ -360,6 +317,197 @@ def delete_payment_method(payment_method_id):
         
     except Exception as e:
         print(f'❌ Error deleting payment method: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/create-setup-intent', methods=['POST'])
+def create_setup_intent():
+    """Create Setup Intent to save payment method without charging"""
+    try:
+        data = request.get_json()
+        customer_id = data.get('customer_id')
+        
+        if not customer_id:
+            return jsonify({'error': 'Customer ID required'}), 400
+        
+        print(f"\n{'='*60}")
+        print(f"Creating Setup Intent (Save Payment Method)")
+        print(f"  Customer ID: {customer_id}")
+        print(f"{'='*60}")
+        
+        # Create Setup Intent
+        setup_intent = stripe.SetupIntent.create(
+            customer=customer_id,
+            payment_method_types=['card'],  # Only cards
+            usage='off_session',  # Can charge later without customer present
+            metadata={
+                'created_from': 'profile_page',
+                'purpose': 'save_payment_method'
+            }
+        )
+        
+        print(f"✅ Setup Intent created: {setup_intent.id}")
+        print(f"   Client secret: {setup_intent.client_secret[:30]}...")
+        print(f"{'='*60}\n")
+        
+        return jsonify({
+            'clientSecret': setup_intent.client_secret,
+            'setupIntentId': setup_intent.id
+        }), 200
+        
+    except Exception as e:
+        print(f'❌ Error creating setup intent: {str(e)}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/confirm-setup-intent', methods=['POST'])
+def confirm_setup_intent():
+    """Set payment method as default after Setup Intent succeeds"""
+    try:
+        data = request.get_json()
+        setup_intent_id = data.get('setup_intent_id')
+        set_as_default = data.get('set_as_default', True)
+        
+        if not setup_intent_id:
+            return jsonify({'error': 'Setup Intent ID required'}), 400
+        
+        print(f"\n{'='*60}")
+        print(f"Confirming Setup Intent: {setup_intent_id}")
+        print(f"{'='*60}")
+        
+        # Retrieve the Setup Intent
+        setup_intent = stripe.SetupIntent.retrieve(setup_intent_id)
+        
+        if setup_intent.status != 'succeeded':
+            return jsonify({
+                'error': f'Setup Intent status is {setup_intent.status}'
+            }), 400
+        
+        customer_id = setup_intent.customer
+        payment_method_id = setup_intent.payment_method
+        
+        print(f"  Customer: {customer_id}")
+        print(f"  Payment Method: {payment_method_id}")
+        
+        # Set as default payment method for invoices
+        if set_as_default:
+            stripe.Customer.modify(
+                customer_id,
+                invoice_settings={
+                    'default_payment_method': payment_method_id
+                }
+            )
+            print(f"✅ Set as default payment method for invoices")
+        
+        print(f"✅ Setup Intent confirmed")
+        print(f"{'='*60}\n")
+        
+        return jsonify({
+            'success': True,
+            'customer_id': customer_id,
+            'payment_method_id': payment_method_id,
+            'is_default': set_as_default
+        }), 200
+        
+    except Exception as e:
+        print(f'❌ Error confirming setup intent: {str(e)}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/set-default-payment-method', methods=['POST'])
+def set_default_payment_method():
+    """Set a payment method as default for invoices"""
+    try:
+        data = request.get_json()
+        customer_id = data.get('customer_id')
+        payment_method_id = data.get('payment_method_id')
+        
+        if not customer_id or not payment_method_id:
+            return jsonify({'error': 'Customer and payment method required'}), 400
+        
+        print(f"Setting default payment method for customer {customer_id}")
+        
+        # Update customer's default payment method
+        customer = stripe.Customer.modify(
+            customer_id,
+            invoice_settings={
+                'default_payment_method': payment_method_id
+            }
+        )
+        
+        print(f"✅ Default payment method set: {payment_method_id}")
+        
+        return jsonify({
+            'success': True,
+            'default_payment_method': payment_method_id
+        }), 200
+        
+    except Exception as e:
+        print(f'❌ Error setting default: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/customer-details/<customer_id>', methods=['GET'])
+def get_customer_details(customer_id):
+    """Get customer details including default payment method"""
+    try:
+        customer = stripe.Customer.retrieve(customer_id)
+        
+        # Get default payment method ID
+        default_pm_id = None
+        if customer.invoice_settings and customer.invoice_settings.default_payment_method:
+            default_pm_id = customer.invoice_settings.default_payment_method
+        
+        return jsonify({
+            'id': customer.id,
+            'email': customer.email,
+            'name': customer.name,
+            'created': customer.created,
+            'default_payment_method': default_pm_id,
+            'metadata': customer.metadata
+        }), 200
+        
+    except Exception as e:
+        print(f'❌ Error retrieving customer: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/customer-payment-methods/<customer_id>', methods=['GET'])
+def get_customer_payment_methods(customer_id):
+    """Get saved payment methods with default indicator"""
+    try:
+        # Get customer to check default payment method
+        customer = stripe.Customer.retrieve(customer_id)
+        default_pm_id = None
+        if customer.invoice_settings and customer.invoice_settings.default_payment_method:
+            default_pm_id = customer.invoice_settings.default_payment_method
+        
+        # Get all payment methods
+        payment_methods = stripe.PaymentMethod.list(
+            customer=customer_id,
+            type='card'
+        )
+        
+        formatted_methods = []
+        for pm in payment_methods.data:
+            formatted_methods.append({
+                'id': pm.id,
+                'brand': pm.card.brand,
+                'last4': pm.card.last4,
+                'exp_month': pm.card.exp_month,
+                'exp_year': pm.card.exp_year,
+                'is_default': pm.id == default_pm_id  # ← Mark if default
+            })
+        
+        return jsonify({
+            'paymentMethods': formatted_methods,
+            'default_payment_method': default_pm_id
+        }), 200
+        
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])

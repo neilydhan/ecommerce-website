@@ -439,4 +439,10 @@ body {
     display: inline-block;
     margin-top: 15px;
   }
+
+  .info-note {
+  font-size: 0.95rem;
+  opacity: 0.9;
+  margin-top: 15px;
+}
 }
