@@ -15,7 +15,11 @@ const Header = () => {
         <Link to="/membership" className="nav-link">
           🏋️ Memberships
         </Link>
-        
+
+        <Link to="/browse-trainers" className="nav-link">
+          💪 Personal Trainers
+        </Link>
+
         {customerId && (
           <Link to="/profile" className="nav-link profile-link">
             👤 My Profile

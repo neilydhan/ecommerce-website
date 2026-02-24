@@ -299,7 +299,7 @@ def webhook():
     
     if event['type'] == 'payment_intent.succeeded':
         payment_intent = event['data']['object']
-        
+
         print('\n' + '='*60)
         print('💰 PAYMENT SUCCEEDED')
         print('='*60)
@@ -308,9 +308,22 @@ def webhook():
         print(f"Shipping Option: {payment_intent.get('metadata', {}).get('shipping_option')}")
         print(f"Shipping Cost: ${payment_intent.get('metadata', {}).get('shipping_cost')}")
         print('='*60 + '\n')
-        
+
         # TODO: Fulfill order with correct shipping method
-    
+
+    elif event['type'] == 'account.updated':
+        account = event['data']['object']
+
+        print('\n' + '='*60)
+        print('🔗 CONNECTED ACCOUNT UPDATED')
+        print('='*60)
+        print(f"Account ID: {account.get('id')}")
+        print(f"Email: {account.get('email')}")
+        print(f"Details Submitted: {account.get('details_submitted')}")
+        print(f"Charges Enabled: {account.get('charges_enabled')}")
+        print(f"Payouts Enabled: {account.get('payouts_enabled')}")
+        print('='*60 + '\n')
+
     return jsonify({'success': True}), 200
 
 
@@ -798,6 +811,215 @@ def report_usage():
         
     except Exception as e:
         print(f'❌ Error recording usage: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+
+# ========== STRIPE CONNECT ENDPOINTS ==========
+
+@app.route('/create-connected-account', methods=['POST'])
+def create_connected_account():
+    """Create a Standard connected account for a trainer"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+
+        if not email:
+            return jsonify({'error': 'Email required'}), 400
+
+        print(f"\n{'='*60}")
+        print(f"Creating Connected Account")
+        print(f"  Email: {email}")
+        print(f"{'='*60}")
+
+        # Create Standard account (trainer gets full dashboard access)
+        account = stripe.Account.create(
+            type='standard',
+            email=email,
+            metadata={
+                'role': 'personal_trainer',
+                'platform': 'larrys_gym'
+            }
+        )
+
+        print(f"✅ Connected Account created: {account.id}")
+        print(f"{'='*60}\n")
+
+        return jsonify({
+            'account_id': account.id,
+            'email': account.email
+        }), 200
+
+    except Exception as e:
+        print(f'❌ Error creating connected account: {str(e)}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/create-account-link', methods=['POST'])
+def create_account_link():
+    """Create account link for trainer onboarding"""
+    try:
+        data = request.get_json()
+        account_id = data.get('account_id')
+
+        if not account_id:
+            return jsonify({'error': 'Account ID required'}), 400
+
+        print(f"\n{'='*60}")
+        print(f"Creating Account Link for onboarding")
+        print(f"  Account: {account_id}")
+        print(f"{'='*60}")
+
+        # Create account link for onboarding
+        account_link = stripe.AccountLink.create(
+            account=account_id,
+            refresh_url=f'http://localhost:3000/admin/trainers?refresh={account_id}',
+            return_url=f'http://localhost:3000/trainer-dashboard?account_id={account_id}',
+            type='account_onboarding'
+        )
+
+        print(f"✅ Account Link created")
+        print(f"   URL: {account_link.url}")
+        print(f"{'='*60}\n")
+
+        return jsonify({
+            'url': account_link.url
+        }), 200
+
+    except Exception as e:
+        print(f'❌ Error creating account link: {str(e)}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/connected-accounts', methods=['GET'])
+def list_connected_accounts():
+    """List all connected accounts (trainers)"""
+    try:
+        print("\nFetching all connected accounts...")
+
+        # List all Standard accounts
+        accounts = stripe.Account.list(limit=100)
+
+        formatted_accounts = []
+        for account in accounts.data:
+            # Only include accounts created by our platform
+            if account.metadata.get('role') == 'personal_trainer':
+                formatted_accounts.append({
+                    'id': account.id,
+                    'email': account.email,
+                    'details_submitted': account.details_submitted,
+                    'charges_enabled': account.charges_enabled,
+                    'payouts_enabled': account.payouts_enabled,
+                    'created': account.created,
+                    'metadata': account.metadata
+                })
+
+        print(f"✅ Found {len(formatted_accounts)} trainer accounts\n")
+        return jsonify({'accounts': formatted_accounts}), 200
+
+    except Exception as e:
+        print(f'❌ Error listing accounts: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/connected-account/<account_id>', methods=['GET'])
+def get_connected_account(account_id):
+    """Get details of a specific connected account"""
+    try:
+        print(f"\nFetching connected account: {account_id}")
+
+        account = stripe.Account.retrieve(account_id)
+
+        # Extract business profile information
+        business_name = None
+        if hasattr(account, 'business_profile') and account.business_profile:
+            business_name = getattr(account.business_profile, 'name', None)
+
+        # Extract individual information
+        individual_name = None
+        if hasattr(account, 'individual') and account.individual:
+            first_name = getattr(account.individual, 'first_name', '')
+            last_name = getattr(account.individual, 'last_name', '')
+            if first_name or last_name:
+                individual_name = f"{first_name} {last_name}".strip()
+
+        account_data = {
+            'id': account.id,
+            'email': account.email,
+            'details_submitted': account.details_submitted,
+            'charges_enabled': account.charges_enabled,
+            'payouts_enabled': account.payouts_enabled,
+            'business_name': business_name,
+            'individual_name': individual_name,
+            'created': account.created,
+            'metadata': dict(account.metadata) if hasattr(account, 'metadata') else {}
+        }
+
+        print(f"✅ Account retrieved: {account.email}")
+        return jsonify(account_data), 200
+
+    except Exception as e:
+        print(f'❌ Error retrieving account: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/create-trainer-payment', methods=['POST'])
+def create_trainer_payment():
+    """Create a direct charge to a trainer's connected account"""
+    try:
+        data = request.get_json()
+        trainer_account_id = data.get('trainer_account_id')
+        customer_id = data.get('customer_id')
+        amount = data.get('amount', 10000)  # Default: $100.00 for 1-hour session
+
+        if not trainer_account_id:
+            return jsonify({'error': 'Trainer account ID required'}), 400
+
+        print(f"\n{'='*60}")
+        print(f"Creating Direct Charge to Trainer")
+        print(f"  Trainer Account: {trainer_account_id}")
+        print(f"  Customer: {customer_id}")
+        print(f"  Amount: ${amount/100:.2f}")
+        print(f"{'='*60}")
+
+        # Create Payment Intent on the connected account
+        # This is a DIRECT CHARGE - money goes to trainer's account
+        # NOTE: Don't pass customer ID - it belongs to platform, not connected account
+        intent_params = {
+            'amount': amount,
+            'currency': 'sgd',
+            'automatic_payment_methods': {'enabled': True},
+            'description': '1-hour Personal Training Session',
+            'metadata': {
+                'trainer_account_id': trainer_account_id,
+                'service_type': 'personal_training_session',
+                'platform_customer_id': customer_id  # Store for reference only
+            }
+        }
+
+        # Create the payment intent ON THE CONNECTED ACCOUNT
+        intent = stripe.PaymentIntent.create(
+            **intent_params,
+            stripe_account=trainer_account_id  # Direct charge
+        )
+
+        print(f"✅ Payment Intent created: {intent.id}")
+        print(f"   On connected account: {trainer_account_id}")
+        print(f"{'='*60}\n")
+
+        return jsonify({
+            'clientSecret': intent.client_secret,
+            'paymentIntentId': intent.id,
+            'amount': amount / 100
+        }), 200
+
+    except Exception as e:
+        print(f'❌ Error creating trainer payment: {str(e)}')
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
