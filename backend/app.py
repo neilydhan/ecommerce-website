@@ -305,8 +305,23 @@ def webhook():
         print('='*60)
         print(f"Payment Intent ID: {payment_intent.get('id')}")
         print(f"Amount: ${payment_intent.get('amount', 0) / 100:.2f}")
-        print(f"Shipping Option: {payment_intent.get('metadata', {}).get('shipping_option')}")
-        print(f"Shipping Cost: ${payment_intent.get('metadata', {}).get('shipping_cost')}")
+
+        # Check if this is a destination charge (Connect payment)
+        transfer_data = payment_intent.get('transfer_data')
+        if transfer_data:
+            destination = transfer_data.get('destination')
+            transfer_amount = transfer_data.get('amount', 0)
+            platform_fee = payment_intent.get('amount', 0) - transfer_amount
+            print(f"Type: Destination Charge (Platform is merchant of record)")
+            print(f"Platform Fee: ${platform_fee / 100:.2f}")
+            print(f"Transfer to Trainer ({destination}): ${transfer_amount / 100:.2f}")
+            print(f"Service Type: {payment_intent.get('metadata', {}).get('service_type', 'N/A')}")
+        else:
+            # Regular e-commerce payment
+            print(f"Type: Regular Payment")
+            print(f"Shipping Option: {payment_intent.get('metadata', {}).get('shipping_option')}")
+            print(f"Shipping Cost: ${payment_intent.get('metadata', {}).get('shipping_cost')}")
+
         print('='*60 + '\n')
 
         # TODO: Fulfill order with correct shipping method
@@ -978,16 +993,24 @@ def create_trainer_payment():
         if not trainer_account_id:
             return jsonify({'error': 'Trainer account ID required'}), 400
 
+        # Calculate platform fee (15%) and transfer amount
+        platform_fee = int(amount * 0.15)
+        transfer_amount = amount - platform_fee
+
         print(f"\n{'='*60}")
-        print(f"Creating Direct Charge to Trainer")
+        print(f"Creating Destination Charge (Platform as Merchant of Record)")
         print(f"  Trainer Account: {trainer_account_id}")
         print(f"  Customer: {customer_id}")
-        print(f"  Amount: ${amount/100:.2f}")
+        print(f"  Total Amount: ${amount/100:.2f}")
+        print(f"  Platform Fee (15%): ${platform_fee/100:.2f}")
+        print(f"  Transfer to Trainer: ${transfer_amount/100:.2f}")
         print(f"{'='*60}")
 
-        # Create Payment Intent on the connected account
-        # This is a DIRECT CHARGE - money goes to trainer's account
-        # NOTE: Don't pass customer ID - it belongs to platform, not connected account
+        # Create Payment Intent on the PLATFORM account
+        # This is a DESTINATION CHARGE
+        # - Payment goes to platform first (Larry's is merchant of record)
+        # - Platform automatically transfers funds to trainer
+        # - Platform keeps 15% fee
         intent_params = {
             'amount': amount,
             'currency': 'sgd',
@@ -996,18 +1019,27 @@ def create_trainer_payment():
             'metadata': {
                 'trainer_account_id': trainer_account_id,
                 'service_type': 'personal_training_session',
-                'platform_customer_id': customer_id  # Store for reference only
+                'platform_fee': platform_fee / 100,
+                'transfer_amount': transfer_amount / 100
+            },
+            'transfer_data': {
+                'destination': trainer_account_id,  # Transfer to trainer
+                'amount': transfer_amount  # Amount after platform fee
             }
         }
 
-        # Create the payment intent ON THE CONNECTED ACCOUNT
-        intent = stripe.PaymentIntent.create(
-            **intent_params,
-            stripe_account=trainer_account_id  # Direct charge
-        )
+        # Add customer if provided (now it works since it's on platform account)
+        if customer_id:
+            intent_params['customer'] = customer_id
+
+        # Create the payment intent ON THE PLATFORM ACCOUNT
+        intent = stripe.PaymentIntent.create(**intent_params)
 
         print(f"✅ Payment Intent created: {intent.id}")
-        print(f"   On connected account: {trainer_account_id}")
+        print(f"   On platform account (Larry's is merchant of record)")
+        print(f"   Will transfer to: {trainer_account_id}")
+        print(f"   Platform keeps: ${platform_fee/100:.2f}")
+        print(f"   Trainer receives: ${transfer_amount/100:.2f}")
         print(f"{'='*60}\n")
 
         return jsonify({

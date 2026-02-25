@@ -59,10 +59,12 @@ stripe trigger checkout.session.completed  # Trigger test events
 
 **Stripe Connect Pattern (Marketplace)**
 - Uses Standard accounts (trainers get full Stripe Dashboard access)
-- Direct charges: payments go directly to connected account, no platform fees
+- Destination charges: payments go to platform first, then transferred to trainer
+- Platform (Larry's) is merchant of record
 - Account Links for Stripe-hosted onboarding flow
 - Trainers sell "1-hour Personal Training Session" at fixed $100 price
-- Payment intents created with `stripe_account` parameter for direct charges
+- Payment intents created with `transfer_data` parameter specifying destination and amount
+- Platform fee: 15% kept by platform ($15), 85% transferred to trainer ($85)
 
 ### Key Backend Endpoints
 
@@ -140,12 +142,15 @@ stripe trigger checkout.session.completed  # Trigger test events
 
 **Stripe Connect Configuration**:
 - Account type: Standard (full dashboard access for trainers)
-- Charge type: Direct charges (using `stripe_account` parameter)
+- Charge type: Destination charges (platform is merchant of record)
 - Onboarding: Account Links with type='account_onboarding'
 - Return URL: `/trainer-dashboard?account_id={ACCOUNT_ID}`
 - Refresh URL: `/admin/trainers?refresh={ACCOUNT_ID}`
 - Connected accounts filtered by `metadata.role='personal_trainer'`
-- No application fees implemented (trainers receive 100% of payment)
+- Platform fee: 15% (kept by platform, not transferred)
+- Transfer amount: 85% (`transfer_data.amount` = amount * 0.85)
+- Fee breakdown: Customer pays $100 → Platform keeps $15 → Platform transfers $85 to trainer
+- Merchant of record: Larry's Gym (platform)
 
 ### Environment Variables
 

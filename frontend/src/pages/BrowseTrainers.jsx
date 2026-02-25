@@ -7,7 +7,7 @@ import Header from '../components/Header';
 import '../BrowseTrainers.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-const STRIPE_PK = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || 'pk_test_51QkqpNB4rwWpXxB1RhJqOzCLwzkXh6PaOBgZI4pAoGPAOCWd8KEwRhh9jFyxxB3zvFLNXHzWnFW5eJcJF0Q8vHb300X7zILsIh';
+const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || 'pk_test_51QkqpNB4rwWpXxB1RhJqOzCLwzkXh6PaOBgZI4pAoGPAOCWd8KEwRhh9jFyxxB3zvFLNXHzWnFW5eJcJF0Q8vHb300X7zILsIh');
 
 // Payment Form Component
 function TrainerPaymentForm({ trainer, onSuccess, onCancel }) {
@@ -87,7 +87,6 @@ function BrowseTrainers() {
   const [loading, setLoading] = useState(true);
   const [selectedTrainer, setSelectedTrainer] = useState(null);
   const [clientSecret, setClientSecret] = useState('');
-  const [stripePromise, setStripePromise] = useState(null);
   const navigate = useNavigate();
 
   const customerId = localStorage.getItem('customerId');
@@ -168,12 +167,6 @@ function BrowseTrainers() {
         amount: 10000 // $100.00 in cents
       });
 
-      // Load Stripe with the connected account ID (required for direct charges)
-      const stripe = await loadStripe(STRIPE_PK, {
-        stripeAccount: trainer.id
-      });
-
-      setStripePromise(Promise.resolve(stripe));
       setClientSecret(response.data.clientSecret);
       setSelectedTrainer(trainer);
     } catch (error) {
@@ -185,7 +178,6 @@ function BrowseTrainers() {
   const handleCancelBooking = () => {
     setSelectedTrainer(null);
     setClientSecret('');
-    setStripePromise(null);
   };
 
   if (loading) {
@@ -208,7 +200,7 @@ function BrowseTrainers() {
         <h1>💪 Personal Trainers</h1>
         <p className="browse-subtitle">Book a 1-hour session with our certified trainers</p>
 
-        {selectedTrainer && clientSecret && stripePromise ? (
+        {selectedTrainer && clientSecret ? (
           <div className="payment-modal">
             <div className="modal-backdrop" onClick={handleCancelBooking}></div>
             <div className="modal-content">

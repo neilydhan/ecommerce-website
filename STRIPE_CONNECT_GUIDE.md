@@ -7,8 +7,10 @@ This guide walks you through testing the Personal Trainer marketplace powered by
 Larry's Gym has added a marketplace feature that allows personal trainers to offer their services directly to customers. The implementation uses:
 
 - **Stripe Connect Standard Accounts**: Trainers get full access to their own Stripe Dashboard
-- **Direct Charges**: Payments go directly to the trainer's account (no platform fees)
+- **Destination Charges**: Payments go to platform first (Larry's is merchant of record), then transferred to trainer
 - **Account Links**: Stripe-hosted onboarding for quick trainer setup
+- **Fee Structure**: Customer pays $100 → Platform keeps $15 → Platform transfers $85 to trainer
+- **Merchant of Record**: Larry's Gym (platform handles disputes, refunds, customer service)
 
 ## Quick Start
 
@@ -88,12 +90,18 @@ The dashboard shows:
 4. Verify payment success page appears
 5. Check backend logs for payment confirmation
 
-### Scenario 3: Direct Charge Verification
+### Scenario 3: Platform Fee and Transfer Verification
 1. Complete a booking
-2. Log into Stripe Dashboard (dashboard.stripe.com)
-3. Switch to the connected account (trainer's account)
-4. Verify the $100 payment appears in their account
-5. Confirm no application fees were taken
+2. Check backend logs for fee breakdown:
+   - Total Amount: $100.00
+   - Platform Fee (15%): $15.00
+   - Transfer to Trainer: $85.00
+3. Log into platform Stripe Dashboard (dashboard.stripe.com)
+4. In Payments tab: See full $100 payment received
+5. In Connect → Transfers: See $85.00 transfer to trainer
+6. Platform balance shows $15.00 kept as fee
+7. Switch to connected account (trainer's account)
+8. Verify $85.00 appears in their balance (from transfer)
 
 ### Scenario 4: Incomplete Onboarding
 1. Start trainer onboarding
@@ -126,34 +134,45 @@ The dashboard shows:
 1. Customer clicks "Book Session"
    → Frontend checks for customer ID
 
-2. Create payment intent on connected account
+2. Create payment intent on PLATFORM account
    POST /create-trainer-payment {
      trainer_account_id,
      customer_id,
      amount: 10000  // $100.00
    }
-   → Payment Intent created with stripe_account parameter
+   → Payment Intent created with transfer_data parameter
+   → Platform keeps 15%, transfers 85% to trainer
 
 3. Customer completes payment
    → Stripe Elements handles payment confirmation
+   → Money goes to platform account first
 
-4. Redirect to success page
+4. Stripe automatically transfers funds to trainer
+   → $85.00 transferred to trainer's account
+   → Platform keeps $15.00
+
+5. Redirect to success page
    → /trainer-payment-success
 ```
 
-### Direct Charges vs Destination Charges
+### Destination Charges vs Direct Charges
 
-This implementation uses **Direct Charges**:
-- Payment Intent created ON the connected account (`stripe_account` parameter)
-- Money goes directly to trainer
+This implementation uses **Destination Charges**:
+- Payment Intent created ON the platform account
+- Money goes to platform first (Larry's is merchant of record)
+- Platform automatically transfers 85% to trainer using `transfer_data`
+- Platform keeps 15% as fee
+- Customer appears on platform's Stripe Dashboard
+- Platform has full control over refunds and disputes
+- More control over funds flow and customer experience
+
+**Alternative: Direct Charges**:
+- Create Payment Intent ON the connected account (`stripe_account` parameter)
+- Money goes directly to trainer's account
+- Use `application_fee_amount` for platform fee
+- Trainer is merchant of record
 - Trainer sees customer in their Stripe Dashboard
-- Platform (Larry's Gym) has no visibility into payment details
-- No application fees (trainer receives 100%)
-
-**If you wanted Destination Charges** (for taking platform fees):
-- Create Payment Intent on platform account
-- Use `transfer_data: { destination: trainer_account_id }`
-- Add `application_fee_amount` for platform cut
+- Less control for platform, more autonomy for trainer
 
 ## Troubleshooting
 
@@ -190,12 +209,13 @@ This implementation uses **Direct Charges**:
 
 To enhance the marketplace, consider adding:
 
-1. **Application Fees**: Take a percentage of each booking
-2. **Trainer Profiles**: Let trainers add bio, specialties, photos
-3. **Booking System**: Schedule-based availability and booking
-4. **Reviews**: Customer ratings and reviews for trainers
-5. **Payouts Dashboard**: Show trainers their earnings and payout schedule
-6. **Multiple Services**: Different session types (30min, 60min, packages)
+1. **Trainer Profiles**: Let trainers add bio, specialties, photos
+2. **Booking System**: Schedule-based availability and booking
+3. **Reviews**: Customer ratings and reviews for trainers
+4. **Payouts Dashboard**: Show trainers their earnings and payout schedule
+5. **Multiple Services**: Different session types (30min, 60min, packages)
+6. **Dynamic Fee Structure**: Different application fee rates for different trainers or tiers
+7. **Fee Transparency**: Show trainers the breakdown of fees in their dashboard
 
 ## Resources
 
